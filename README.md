@@ -4,7 +4,7 @@ A family meal planner you can install on your iPhone.
 
 ---
 
-## 🚀 Deploy to Vercel (free)
+## 🚀 Deploy to Vercel (free) 
 
 ### Step 1 — Create a GitHub account
 Go to [github.com](https://github.com) and sign up for free.
