@@ -124,7 +124,9 @@ export default function MealPlanner() {
   const [dragging, setDragging] = useState(null); // { meal, fromDay, fromSlot }
   const [dragOver, setDragOver] = useState(null); // { day, slot }
   const dragRef = useRef(null); // reliable drag source across async events
-  const [saveLeftoverPopover, setSaveLeftoverPopover] = useState(null); // { meal, day, slot, type, portions }
+  const [saveLeftoverPopover, setSaveLeftoverPopover] = useState(null);
+  const [selectedDay, setSelectedDay] = useState(0); // index into DAYS for mobile view
+  const touchStartX = useRef(null); // { meal, day, slot, type, portions }
   const [pantryOpen, setPantryOpen] = useState(false);
   const [pantry, setPantry] = useLocalStorage("ff_pantry", [
     "olive oil", "garlic", "onion", "salt", "pepper", "butter", "eggs", "flour", "sugar", "soy sauce", "cumin", "rice"
@@ -657,6 +659,48 @@ Only use tags from this list: ⚡ Quick, 💪 High Protein, ❄️ Freezer Frien
         .leftover-cancel-btn { width: 100%; padding: 6px; background: transparent; border: none; color: #6a5848; font-family: 'Nunito', sans-serif; font-size: 11px; cursor: pointer; margin-top: 4px; }
         .leftover-cancel-btn:hover { color: #a89070; }
 
+        /* Mobile day view */
+        .mobile-day-nav { display: none; }
+        .mobile-slot-card { background: #fff; border: 1.5px solid #ede5d8; border-radius: 14px; padding: 14px; margin-bottom: 10px; position: relative; }
+        .mobile-slot-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #8a7060; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+        .mobile-meal-name { font-size: 15px; font-weight: 700; color: #2d2416; margin-bottom: 6px; }
+        .mobile-meal-tag { display: inline-block; font-size: 10px; padding: 2px 8px; border-radius: 999px; margin-right: 4px; }
+        .mobile-add-btn { width: 100%; padding: 12px; background: #faf7f2; border: 1.5px dashed #e0d4c4; border-radius: 10px; color: #a89070; font-family: 'Nunito', sans-serif; font-size: 14px; cursor: pointer; }
+        .mobile-add-btn:active { background: #f5ede0; }
+        .mobile-cell-actions { display: flex; gap: 8px; margin-top: 8px; }
+        .mobile-action-btn { flex: 1; padding: 7px; border-radius: 8px; border: 1px solid #e0d4c4; background: transparent; font-family: 'Nunito', sans-serif; font-size: 12px; font-weight: 600; color: #8a7060; cursor: pointer; }
+        .mobile-action-btn.danger { color: #f87171; border-color: #fca5a5; }
+        .mobile-action-btn:active { background: #faf7f2; }
+        .day-nav-row { display: none; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+        .day-nav-arrow { width: 36px; height: 36px; border-radius: 50%; border: 1.5px solid #e0d4c4; background: #fff; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: #2d2416; }
+        .day-nav-arrow:disabled { opacity: 0.3; }
+        .day-nav-label { text-align: center; }
+        .day-nav-name { font-family: 'Lora', serif; font-size: 20px; color: #2d2416; font-weight: 600; }
+        .day-nav-dots { display: flex; gap: 5px; justify-content: center; margin-top: 5px; }
+        .day-dot { width: 6px; height: 6px; border-radius: 50%; background: #e0d4c4; transition: background 0.15s; }
+        .day-dot.active { background: #e8a045; }
+        .mobile-this-week { background: #fff; border: 1.5px solid #ede5d8; border-radius: 14px; overflow: hidden; margin-top: 16px; }
+        .mobile-this-week-header { background: #2d2416; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; cursor: pointer; }
+        .mobile-this-week-toggle { font-size: 11px; color: #a89070; }
+
+        @media (max-width: 640px) {
+          .planner-layout { display: block; }
+          .planner-grid-wrap { display: none; }
+          .scratchpad { display: none; }
+          .day-nav-row { display: flex; }
+          .mobile-day-view { display: block; }
+          .mobile-this-week { display: block; }
+          .drawer-fab { bottom: calc(24px + env(safe-area-inset-bottom)); right: 16px; padding: 10px 16px; font-size: 13px; }
+          .snacks-fab { bottom: calc(74px + env(safe-area-inset-bottom)); right: 16px; padding: 10px 16px; font-size: 13px; }
+          .pantry-fab { bottom: calc(124px + env(safe-area-inset-bottom)); right: 16px; padding: 10px 16px; font-size: 13px; }
+          .content { padding: 16px 12px calc(180px + env(safe-area-inset-bottom)); }
+        }
+        @media (min-width: 641px) {
+          .mobile-day-view { display: none; }
+          .mobile-this-week { display: none; }
+          .day-nav-row { display: none; }
+        }
+
         .meal-cell.dragging-source { opacity: 0.4; border-style: dashed; }
         .meal-cell.drag-over-empty { border-color: #e8a045; background: #fffbf4; box-shadow: 0 0 0 2px #e8a04555; }
         .meal-cell.drag-over-filled { border-color: #6b8fba; background: #f0f6ff; box-shadow: 0 0 0 2px #6b8fba55; }
@@ -708,8 +752,19 @@ Only use tags from this list: ⚡ Quick, 💪 High Protein, ❄️ Freezer Frien
 
           {/* ── PLANNER ── */}
           {view === "planner" && (
-            <div className="planner-layout">
-              {/* Weekly grid */}
+            <div className="planner-layout"
+              onTouchStart={e => { touchStartX.current = e.touches[0].clientX; }}
+              onTouchEnd={e => {
+                if (touchStartX.current === null) return;
+                const diff = touchStartX.current - e.changedTouches[0].clientX;
+                if (Math.abs(diff) > 50) {
+                  if (diff > 0) setSelectedDay(d => Math.min(d + 1, DAYS.length - 1));
+                  else setSelectedDay(d => Math.max(d - 1, 0));
+                }
+                touchStartX.current = null;
+              }}
+            >
+              {/* ── Desktop grid ── */}
               <div className="planner-grid-wrap">
               <div className="week-grid">
                 <div />
@@ -898,6 +953,79 @@ Only use tags from this list: ⚡ Quick, 💪 High Protein, ❄️ Freezer Frien
                     <button className="scratch-add-btn" onClick={() => setScratchPickerOpen(true)}>
                       + Add a meal idea
                     </button>
+                  )}
+                </div>
+              </div>
+
+              {/* ── Mobile day view ── */}
+              <div className="day-nav-row">
+                <button className="day-nav-arrow" onClick={() => setSelectedDay(d => Math.max(d - 1, 0))} disabled={selectedDay === 0}>‹</button>
+                <div className="day-nav-label">
+                  <div className="day-nav-name">{DAYS[selectedDay]}</div>
+                  <div className="day-nav-dots">
+                    {DAYS.map((_, i) => <div key={i} className={`day-dot ${i === selectedDay ? "active" : ""}`} />)}
+                  </div>
+                </div>
+                <button className="day-nav-arrow" onClick={() => setSelectedDay(d => Math.min(d + 1, DAYS.length - 1))} disabled={selectedDay === DAYS.length - 1}>›</button>
+              </div>
+
+              <div className="mobile-day-view">
+                {SLOTS.map(slot => {
+                  const day = DAYS[selectedDay];
+                  const meal = plan[day][slot];
+                  return (
+                    <div key={slot} className="mobile-slot-card">
+                      <div className="mobile-slot-label">{SLOT_ICONS[slot]} {slot}</div>
+                      {meal ? (
+                        <>
+                          <div className="mobile-meal-name">{meal.name}</div>
+                          <div>
+                            {meal.tags.slice(0, 2).map(t => (
+                              <span key={t} className="mobile-meal-tag" style={{ background: TAG_COLORS[t]?.bg, color: TAG_COLORS[t]?.text }}>{t}</span>
+                            ))}
+                          </div>
+                          <div className="mobile-cell-actions">
+                            <button className="mobile-action-btn" onClick={() => {
+                              const rect = document.body.getBoundingClientRect();
+                              setSaveLeftoverPopover({ meal, day, slot, type: "leftover", portions: 2, x: rect.width / 2 - 110, y: 200 });
+                            }}>🍱 Save leftovers</button>
+                            <button className="mobile-action-btn danger" onClick={() => removeMeal(day, slot)}>Remove</button>
+                          </div>
+                        </>
+                      ) : (
+                        <button className="mobile-add-btn" onClick={() => setSelecting({ day, slot })}>+ Add meal</button>
+                      )}
+                    </div>
+                  );
+                })}
+
+                {/* Mobile This Week */}
+                <div className="mobile-this-week">
+                  <div className="mobile-this-week-header" onClick={() => setScratchPickerOpen(p => !p)}>
+                    <div className="scratch-title">📝 This Week {scratchpad.length > 0 && <span className="scratch-count">{scratchpad.length}</span>}</div>
+                    <span className="mobile-this-week-toggle">{scratchPickerOpen ? "▲" : "▼"}</span>
+                  </div>
+                  {scratchPickerOpen && (
+                    <div className="scratch-body">
+                      {scratchpad.length === 0 && (
+                        <div className="scratch-empty"><span className="scratch-empty-icon">💡</span>Queue meals you want this week</div>
+                      )}
+                      {scratchpad.map(meal => (
+                        <div key={meal.id} className="scratch-item">
+                          <div className="scratch-item-name">{meal.name}</div>
+                          <div className="scratch-item-slots">
+                            {(meal.mealTypes || []).map(s => <span key={s} className="scratch-item-slot">{SLOT_ICONS[s]} {s}</span>)}
+                          </div>
+                          <div className="scratch-item-btns">
+                            <button className="scratch-plan-btn" onClick={() => {
+                              planFromScratchpad(meal, DAYS[selectedDay], SLOTS.find(s => !plan[DAYS[selectedDay]][s]) || "Dinner");
+                            }}>📅 Add to {DAYS[selectedDay]}</button>
+                            <button className="scratch-remove-btn" onClick={() => removeFromScratchpad(meal.id)}>×</button>
+                          </div>
+                        </div>
+                      ))}
+                      <button className="scratch-add-btn" onClick={() => { setScratchPickerOpen(false); setTimeout(() => setScratchPickerOpen(true), 50); }}>+ Add a meal idea</button>
+                    </div>
                   )}
                 </div>
               </div>
