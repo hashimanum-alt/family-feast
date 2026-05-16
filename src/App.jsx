@@ -1,5 +1,18 @@
 import React, { useState, useEffect, useRef } from "react";
 
+function useLocalStorage(key, initial) {
+  const [value, setValue] = useState(() => {
+    try {
+      const stored = localStorage.getItem(key);
+      return stored ? JSON.parse(stored) : initial;
+    } catch { return initial; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
+  }, [key, value]);
+  return [value, setValue];
+}
+
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const SLOTS = ["Breakfast", "Lunch", "Dinner"];
 
@@ -82,8 +95,8 @@ function PlanItGrid({ item, plan, onPlan, onClose }) {
 
 export default function MealPlanner() {
   const [view, setView] = useState("planner"); // planner | meals | shopping | suggest
-  const [plan, setPlan] = useState(EMPTY_PLAN());
-  const [meals, setMeals] = useState(INITIAL_MEALS);
+  const [plan, setPlan] = useLocalStorage("ff_plan", EMPTY_PLAN());
+  const [meals, setMeals] = useLocalStorage("ff_meals", INITIAL_MEALS);
   const [selecting, setSelecting] = useState(null); // {day, slot}
   const [search, setSearch] = useState("");
   const [filterTag, setFilterTag] = useState(null);
@@ -94,16 +107,16 @@ export default function MealPlanner() {
   const [aiSuggestions, setAiSuggestions] = useState([]);
   const [aiGoal, setAiGoal] = useState("");
   const [cookedToday, setCookedToday] = useState(null);
-  const [shoppingChecked, setShoppingChecked] = useState({});
+  const [shoppingChecked, setShoppingChecked] = useLocalStorage("ff_shoppingChecked", {});
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [inventory, setInventory] = useState([
+  const [inventory, setInventory] = useLocalStorage("ff_inventory", [
     { id: 1, name: "Leftover Spaghetti Bolognese", type: "leftover", portions: 2, addedDay: "Monday", mealTypes: ["Lunch", "Dinner"] },
     { id: 2, name: "Frozen Chicken Soup", type: "freezer", portions: 4, addedDay: null, mealTypes: ["Lunch", "Dinner"] },
   ]);
   const [newInvItem, setNewInvItem] = useState({ name: "", type: "leftover", portions: 2, mealTypes: [] });
   const [addingInv, setAddingInv] = useState(false);
   const [planningItem, setPlanningItem] = useState(null); // inventory item being planned
-  const [scratchpad, setScratchpad] = useState([]); // queued meals for the week
+  const [scratchpad, setScratchpad] = useLocalStorage("ff_scratchpad", []); // queued meals for the week
   const [scratchSearch, setScratchSearch] = useState("");
   const [scratchPickerOpen, setScratchPickerOpen] = useState(false);
   const [scratchPlanningId, setScratchPlanningId] = useState(null); // which scratchpad item is showing its grid
@@ -113,16 +126,16 @@ export default function MealPlanner() {
   const dragRef = useRef(null); // reliable drag source across async events
   const [saveLeftoverPopover, setSaveLeftoverPopover] = useState(null); // { meal, day, slot, type, portions }
   const [pantryOpen, setPantryOpen] = useState(false);
-  const [pantry, setPantry] = useState([
+  const [pantry, setPantry] = useLocalStorage("ff_pantry", [
     "olive oil", "garlic", "onion", "salt", "pepper", "butter", "eggs", "flour", "sugar", "soy sauce", "cumin", "rice"
   ]);
   const [newPantryItem, setNewPantryItem] = useState("");
-  const [showPantryItems, setShowPantryItems] = useState(false); // toggle hide/show in shopping
-  const [pantryShoppingItems, setPantryShoppingItems] = useState([]); // pantry items added to shopping list
+  const [showPantryItems, setShowPantryItems] = useState(false);
+  const [pantryShoppingItems, setPantryShoppingItems] = useLocalStorage("ff_pantryShoppingItems", []);
   const [snacksOpen, setSnacksOpen] = useState(false);
-  const [snacks, setSnacks] = useState(["Rice cakes", "Granola bars", "Apple sauce pouches", "Popcorn", "Crackers"]);
+  const [snacks, setSnacks] = useLocalStorage("ff_snacks", ["Rice cakes", "Granola bars", "Apple sauce pouches", "Popcorn", "Crackers"]);
   const [newSnack, setNewSnack] = useState("");
-  const [snackShoppingList, setSnackShoppingList] = useState([]);
+  const [snackShoppingList, setSnackShoppingList] = useLocalStorage("ff_snackShoppingList", []);
 
   const saveScratchNewMeal = () => {
     if (!scratchNewMeal?.name?.trim()) return;
@@ -343,40 +356,35 @@ Only use tags from this list: ⚡ Quick, 💪 High Protein, ❄️ Freezer Frien
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;1,400&family=Nunito:wght@400;500;600;700&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        html { height: -webkit-fill-available; }
-        body { min-height: 100vh; min-height: -webkit-fill-available; }
 
-        .mp { min-height: 100vh; min-height: -webkit-fill-available; background: #faf7f2; font-family: 'Nunito', sans-serif; color: #2d2416; }
+        .mp { min-height: 100vh; background: #faf7f2; font-family: 'Nunito', sans-serif; color: #2d2416; }
 
         /* Header */
-        .header { background: #2d2416; padding: 18px 20px 0; padding-top: calc(18px + env(safe-area-inset-top)); }
+        .header { background: #2d2416; padding: 18px 20px 0; }
         .header-top { display: flex; align-items: center; justify-content: space-between; max-width: 900px; margin: 0 auto; padding-bottom: 0; }
         .logo { font-family: 'Lora', serif; font-size: 22px; color: #f5e6c8; letter-spacing: -0.01em; }
         .logo span { color: #e8a045; font-style: italic; }
         .planned-badge { font-size: 12px; color: #a89070; background: #3d3020; padding: 4px 12px; border-radius: 999px; }
 
-        .nav { display: flex; gap: 4px; max-width: 900px; margin: 0 auto; padding-top: 14px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
-        .nav::-webkit-scrollbar { display: none; }
-        .nav-btn { padding: 9px 18px; font-size: 13px; font-weight: 600; border: none; cursor: pointer; border-radius: 8px 8px 0 0; font-family: 'Nunito', sans-serif; transition: all 0.15s; white-space: nowrap; flex-shrink: 0; }
+        .nav { display: flex; gap: 4px; max-width: 900px; margin: 0 auto; padding-top: 14px; }
+        .nav-btn { padding: 9px 18px; font-size: 13px; font-weight: 600; border: none; cursor: pointer; border-radius: 8px 8px 0 0; font-family: 'Nunito', sans-serif; transition: all 0.15s; }
         .nav-btn.active { background: #faf7f2; color: #2d2416; }
         .nav-btn.inactive { background: transparent; color: #a89070; }
         .nav-btn.inactive:hover { color: #f5e6c8; }
 
-        .content { max-width: 900px; margin: 0 auto; padding: 24px 16px calc(60px + env(safe-area-inset-bottom)); }
+        .content { max-width: 900px; margin: 0 auto; padding: 24px 16px 60px; }
 
-        /* Planner grid — scrollable on mobile */
-        .planner-layout { display: flex; gap: 16px; align-items: flex-start; }
-        .planner-grid-wrap { flex: 1; min-width: 0; overflow-x: auto; -webkit-overflow-scrolling: touch; }
-        .week-grid { display: grid; grid-template-columns: 60px repeat(7, minmax(80px, 1fr)); gap: 5px; min-width: 640px; }
-        .col-head { text-align: center; padding: 8px 4px; font-size: 11px; font-weight: 700; color: #8a7060; text-transform: uppercase; letter-spacing: 0.06em; }
-        .row-label { display: flex; align-items: center; justify-content: flex-end; padding-right: 8px; font-size: 10px; font-weight: 700; color: #8a7060; text-transform: uppercase; letter-spacing: 0.05em; }
+        /* Planner grid */
+        .week-grid { display: grid; grid-template-columns: 80px repeat(7, 1fr); gap: 6px; }
+        .col-head { text-align: center; padding: 8px 4px; font-size: 12px; font-weight: 700; color: #8a7060; text-transform: uppercase; letter-spacing: 0.06em; }
+        .row-label { display: flex; align-items: center; justify-content: flex-end; padding-right: 10px; font-size: 11px; font-weight: 700; color: #8a7060; text-transform: uppercase; letter-spacing: 0.05em; }
 
         .meal-cell {
           background: #fff;
           border: 1.5px solid #ede5d8;
           border-radius: 10px;
-          min-height: 68px;
-          padding: 7px;
+          min-height: 72px;
+          padding: 8px;
           cursor: pointer;
           transition: all 0.15s;
           position: relative;
@@ -389,18 +397,6 @@ Only use tags from this list: ⚡ Quick, 💪 High Protein, ❄️ Freezer Frien
         .meal-cell:hover { border-color: #e8a045; background: #fffdf8; }
         .meal-cell.filled { background: #fffbf4; border-color: #e8c07a; justify-content: flex-start; align-items: flex-start; text-align: left; }
         .meal-cell.selecting-active { border-color: #e8a045; background: #fffbf4; box-shadow: 0 0 0 2px #e8a04544; }
-
-        /* Mobile */
-        @media (max-width: 600px) {
-          .planner-layout { flex-direction: column; }
-          .scratchpad { width: 100%; }
-          .planner-grid-wrap { width: 100%; }
-          .drawer { width: 100% !important; }
-          .pantry-drawer { width: 100% !important; }
-          .snacks-drawer { width: 100% !important; }
-          .nav-btn { padding: 9px 14px; font-size: 12px; }
-          .logo { font-size: 18px; }
-        }
 
         .cell-empty-text { font-size: 18px; color: #d4c4b0; }
         .cell-meal-name { font-size: 11px; font-weight: 700; color: #2d2416; line-height: 1.3; margin-bottom: 4px; }
@@ -490,12 +486,12 @@ Only use tags from this list: ⚡ Quick, 💪 High Protein, ❄️ Freezer Frien
         .top-count { font-size: 12px; color: #a89070; }
 
         /* Drawer */
-        .drawer-fab { position: fixed; bottom: calc(24px + env(safe-area-inset-bottom)); right: 24px; z-index: 200; background: #2d2416; color: #f5e6c8; border: none; border-radius: 999px; padding: 12px 20px; font-family: 'Nunito', sans-serif; font-size: 14px; font-weight: 700; cursor: pointer; box-shadow: 0 4px 20px #00000030; display: flex; align-items: center; gap: 8px; transition: all 0.2s; }
+        .drawer-fab { position: fixed; bottom: 24px; right: 24px; z-index: 200; background: #2d2416; color: #f5e6c8; border: none; border-radius: 999px; padding: 12px 20px; font-family: 'Nunito', sans-serif; font-size: 14px; font-weight: 700; cursor: pointer; box-shadow: 0 4px 20px #00000030; display: flex; align-items: center; gap: 8px; transition: all 0.2s; }
         .drawer-fab:hover { background: #e8a045; color: #fff; transform: translateY(-2px); }
         .drawer-fab .inv-count { background: #e8a045; color: #fff; border-radius: 999px; padding: 1px 7px; font-size: 11px; }
-        .pantry-fab { position: fixed; bottom: calc(136px + env(safe-area-inset-bottom)); right: 24px; z-index: 200; background: #4a7c59; color: #f0faf4; border: none; border-radius: 999px; padding: 12px 20px; font-family: 'Nunito', sans-serif; font-size: 14px; font-weight: 700; cursor: pointer; box-shadow: 0 4px 20px #00000030; display: flex; align-items: center; gap: 8px; transition: all 0.2s; }
+        .pantry-fab { position: fixed; bottom: 136px; right: 24px; z-index: 200; background: #4a7c59; color: #f0faf4; border: none; border-radius: 999px; padding: 12px 20px; font-family: 'Nunito', sans-serif; font-size: 14px; font-weight: 700; cursor: pointer; box-shadow: 0 4px 20px #00000030; display: flex; align-items: center; gap: 8px; transition: all 0.2s; }
         .pantry-fab:hover { background: #3a6347; color: #fff; transform: translateY(-2px); }
-        .snacks-fab { position: fixed; bottom: calc(80px + env(safe-area-inset-bottom)); right: 24px; z-index: 200; background: #7c5cbf; color: #f5f0ff; border: none; border-radius: 999px; padding: 12px 20px; font-family: 'Nunito', sans-serif; font-size: 14px; font-weight: 700; cursor: pointer; box-shadow: 0 4px 20px #00000030; display: flex; align-items: center; gap: 8px; transition: all 0.2s; }
+        .snacks-fab { position: fixed; bottom: 80px; right: 24px; z-index: 200; background: #7c5cbf; color: #f5f0ff; border: none; border-radius: 999px; padding: 12px 20px; font-family: 'Nunito', sans-serif; font-size: 14px; font-weight: 700; cursor: pointer; box-shadow: 0 4px 20px #00000030; display: flex; align-items: center; gap: 8px; transition: all 0.2s; }
         .snacks-fab:hover { background: #6446a8; color: #fff; transform: translateY(-2px); }
         .snacks-count { background: #fff; color: #7c5cbf; border-radius: 999px; padding: 1px 7px; font-size: 11px; font-weight: 700; }
         .snacks-drawer { position: fixed; right: 0; top: 0; bottom: 0; width: 300px; background: #f8f5ff; z-index: 400; box-shadow: -4px 0 30px #00000020; display: flex; flex-direction: column; }
